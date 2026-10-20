@@ -13,12 +13,11 @@ ROOT = Path(__file__).resolve().parent.parent
 MODEL_PATH = ROOT / "models" / "best_model.joblib"
 DATA_PATH = ROOT / "data" / "googleplaystore_final_cleaned.csv"
 
-# Soft background colour for each result
-TIER_COLOURS = {"Low": "#EBDDDD", "Medium": "#F1E9CF", "High": "#D8E7DA"}
-TIER_MEANING = {
-    "Low": "fewer than 10,000 installs",
-    "Medium": "10,000 to 999,999 installs",
-    "High": "1,000,000 or more installs",
+# Look of each result: emoji, card colour, bar colour, meaning
+TIERS = {
+    "Low":    {"emoji": "🌱", "card": "#FFE3E3", "bar": "#F4A6A6", "text": "fewer than 10,000 installs"},
+    "Medium": {"emoji": "⭐", "card": "#FFF3C4", "bar": "#F2C94C", "text": "10,000 to 999,999 installs"},
+    "High":   {"emoji": "🚀", "card": "#D6F5E3", "bar": "#6FCF97", "text": "1,000,000 or more installs"},
 }
 
 
@@ -41,11 +40,29 @@ def load_options():
     }
 
 
-# ---------- 2. Page layout ----------
+def start_at(values, wanted):
+    """Position of the value we want to show first (0 if it is not in the list)."""
+    return values.index(wanted) if wanted in values else 0
+
+
+def confidence_bar(label, value, colour):
+    """One small coloured bar, drawn with HTML."""
+    return (f"<div style='margin:8px 0 2px 0'>{label}: <b>{value:.0%}</b></div>"
+            f"<div style='background:#EEE9F7; border-radius:8px; height:12px'>"
+            f"<div style='width:{value * 100:.0f}%; background:{colour}; "
+            f"height:12px; border-radius:8px'></div></div>")
+
+
+# ---------- 2. Page header ----------
 st.set_page_config(page_title="App Success Predictor", page_icon="📱")
-st.title("Mobile App Success Predictor")
-st.write("Describe your app before launch. The model predicts how many "
-         "installs it is likely to reach: Low, Medium or High.")
+
+st.markdown(
+    "<div style='background:linear-gradient(135deg,#E8E0FF,#FFE3EC,#DFF5EA); "
+    "padding:24px; border-radius:16px; margin-bottom:16px; color:#3A3350'>"
+    "<h1 style='margin:0'>📱 Mobile App Success Predictor</h1>"
+    "<p style='margin:8px 0 0 0'>Tell us about your app before launch, and the model "
+    "predicts how many installs it is likely to reach.</p></div>",
+    unsafe_allow_html=True)
 
 if not MODEL_PATH.exists() or not DATA_PATH.exists():
     st.error("Model or data file not found. Check that models/best_model.joblib "
@@ -55,32 +72,38 @@ if not MODEL_PATH.exists() or not DATA_PATH.exists():
 model = load_model()
 options = load_options()
 
-# ---- Inputs ----
-col1, col2 = st.columns(2)
-with col1:
-    category = st.selectbox("Category", options["category"],
-                            format_func=lambda x: x.replace("_", " ").title())
-    genres = st.selectbox("Main genre", options["genres"])
-    content_rating = st.selectbox("Content rating", options["content_rating"])
-    android = st.selectbox("Minimum Android version", options["android"])
+# ---------- 3. Inputs ----------
+with st.container(border=True):
+    col1, col2 = st.columns(2)
+    with col1:
+        category = st.selectbox("🎮 Category", options["category"],
+                                index=start_at(options["category"], "GAME"),
+                                format_func=lambda x: x.replace("_", " ").title())
+        genres = st.selectbox("🎨 Main genre", options["genres"],
+                              index=start_at(options["genres"], "Casual"))
+        content_rating = st.selectbox("👪 Content rating", options["content_rating"],
+                                      index=start_at(options["content_rating"], "Everyone"))
+        android = st.selectbox("🤖 Minimum Android version", options["android"],
+                               index=start_at(options["android"], 4.0),
+                               format_func=lambda v: f"Android {v}+")
 
-with col2:
-    app_type = st.radio("Pricing", ["Free", "Paid"], horizontal=True)
-    price = st.number_input("Price (USD)", min_value=0.0, max_value=400.0,
-                            value=0.99, step=0.5, disabled=(app_type == "Free"))
-    size_varies = st.checkbox("Size varies with device")
-    size_mb = st.number_input("App size (MB)", min_value=0.0, max_value=100.0,
-                              value=15.0, step=1.0, disabled=size_varies)
+    with col2:
+        app_type = st.radio("💰 Pricing", ["Free", "Paid"], horizontal=True)
+        price = st.number_input("Price (USD)", min_value=0.0, max_value=400.0,
+                                value=0.99, step=0.5, disabled=(app_type == "Free"))
+        size_varies = st.checkbox("Size varies with device")
+        size_mb = st.number_input("📦 App size (MB)", min_value=0.0, max_value=100.0,
+                                  value=15.0, step=1.0, disabled=size_varies)
 
-# ---------- 3. Validation ----------
+# ---------- 4. Validation ----------
 errors = []
 if app_type == "Paid" and price <= 0:
     errors.append("A paid app needs a price above 0.")
 if not size_varies and size_mb <= 0:
     errors.append("Enter the app size, or tick 'Size varies with device'.")
 
-# ---------- 4. Predict ----------
-if st.button("Predict success tier", type="primary"):
+# ---------- 5. Predict ----------
+if st.button("✨ Predict success tier", type="primary"):
     if errors:
         for e in errors:
             st.warning(e)
@@ -103,11 +126,12 @@ if st.button("Predict success tier", type="primary"):
                 row[col] = np.nan
 
         tier = model.predict(row)[0]
+        look = TIERS[tier]
         st.markdown(
-            f"<div style='background:{TIER_COLOURS[tier]}; padding:18px; "
-            f"border-radius:10px; color:#2B3A42;'>"
-            f"<h3 style='margin:0'>Predicted tier: {tier}</h3>"
-            f"<p style='margin:4px 0 0 0'>{TIER_MEANING[tier]}</p></div>",
+            f"<div style='background:{look['card']}; padding:20px; "
+            f"border-radius:14px; color:#3A3350; margin-top:12px'>"
+            f"<h2 style='margin:0'>{look['emoji']} Predicted tier: {tier}</h2>"
+            f"<p style='margin:6px 0 0 0'>{look['text']}</p></div>",
             unsafe_allow_html=True)
 
         # Show how confident the model is (if the model supports it)
@@ -115,7 +139,10 @@ if st.button("Predict success tier", type="primary"):
             probs = pd.Series(model.predict_proba(row)[0], index=model.classes_)
             st.write("")
             st.caption("Model confidence")
-            st.bar_chart(probs[["Low", "Medium", "High"]])
+            for t in ["Low", "Medium", "High"]:
+                st.markdown(confidence_bar(t, probs[t], TIERS[t]["bar"]),
+                            unsafe_allow_html=True)
 
+st.write("")
 st.caption("Tiers are approximate because Google Play shows installs as ranges. "
            "This is a pattern-based estimate, not a guarantee.")
