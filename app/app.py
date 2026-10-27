@@ -12,6 +12,7 @@ import streamlit as st
 ROOT = Path(__file__).resolve().parent.parent
 MODEL_PATH = ROOT / "models" / "best_model.joblib"
 DATA_PATH = ROOT / "data" / "googleplaystore_final_cleaned.csv"
+COMPARISON_PATH = ROOT / "models" / "model_comparison.csv"
 
 # Look of each result: emoji, card colour, bar colour, meaning
 TIERS = {
@@ -50,6 +51,14 @@ def confidence_bar(label, value, colour):
     return (f"<div style='margin:8px 0 2px 0'>{label}: <b>{value:.0%}</b></div>"
             f"<div style='background:#EEE9F7; border-radius:8px; height:12px'>"
             f"<div style='width:{value * 100:.0f}%; background:{colour}; "
+            f"height:12px; border-radius:8px'></div></div>")
+
+
+def score_bar(label, score, colour):
+    """A bar for one model's score (0 to 1), with the number shown."""
+    return (f"<div style='margin:8px 0 2px 0'>{label}: <b>{score:.3f}</b></div>"
+            f"<div style='background:#EEE9F7; border-radius:8px; height:12px'>"
+            f"<div style='width:{score * 100:.0f}%; background:{colour}; "
             f"height:12px; border-radius:8px'></div></div>")
 
 
@@ -142,6 +151,34 @@ if st.button("✨ Predict success tier", type="primary"):
             for t in ["Low", "Medium", "High"]:
                 st.markdown(confidence_bar(t, probs[t], TIERS[t]["bar"]),
                             unsafe_allow_html=True)
+
+# ---------- 6. How the 6 models compare ----------
+with st.expander("📊 How the 6 models compare"):
+    if COMPARISON_PATH.exists():
+        comp = pd.read_csv(COMPARISON_PATH).sort_values("Macro-F1", ascending=False)
+        best = comp.iloc[0]["Model"]
+        st.write(f"**{best}** scored highest, so it is the model used for the predictions above. "
+                 "The other models were trained and tested only for comparison.")
+        st.caption("Macro-F1 on the test set (higher is better)")
+        for _, r in comp.iterrows():
+            colour = "#8E7CC3" if r["Model"] == best else "#CFC8E6"
+            st.markdown(score_bar(r["Model"], r["Macro-F1"], colour), unsafe_allow_html=True)
+
+        st.write("")
+        st.dataframe(comp[["Model", "Accuracy", "Macro-F1", "Weighted-F1",
+                           "Train-Test gap (Macro-F1)"]].round(3),
+                     hide_index=True, use_container_width=True)
+
+        st.markdown(
+            "**How the best model was chosen**\n\n"
+            "1. All models used the same 80:20 stratified train/test split.\n"
+            "2. Each model was tuned on the training data only, with 5-fold cross-validation.\n"
+            "3. Each tuned model was tested once on the 20% test data it had never seen.\n"
+            "4. The highest Macro-F1 wins. It treats Low, Medium and High equally, "
+            "so a model cannot score well by ignoring one tier.\n"
+            "5. A large train-test gap means overfitting: the model memorised the training data.")
+    else:
+        st.info("Add models/model_comparison.csv to the repo to see this comparison.")
 
 st.write("")
 st.caption("Tiers are approximate because Google Play shows installs as ranges. "
