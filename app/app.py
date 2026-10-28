@@ -152,34 +152,17 @@ if st.button("✨ Predict success tier", type="primary"):
                 st.markdown(confidence_bar(t, probs[t], TIERS[t]["bar"]),
                             unsafe_allow_html=True)
 
-# ---------- 6. How the 6 models compare ----------
-with st.expander("📊 How the 6 models compare"):
+# ---------- 6. Model comparison (sidebar) ----------
+with st.sidebar:
+    st.markdown("### 📊 How the 6 models compare")
     if COMPARISON_PATH.exists():
         comp = pd.read_csv(COMPARISON_PATH).sort_values("Macro-F1", ascending=False)
         best = comp.iloc[0]["Model"]
-        st.write(f"**{best}** scored highest, so it is the model used for the predictions above. "
+        st.write(f"**{best}** scored highest, so it is the model used for the predictions. "
                  "The other models were trained and tested only for comparison.")
         st.caption("Macro-F1 on the test set (higher is better)")
         for _, r in comp.iterrows():
             colour = "#8E7CC3" if r["Model"] == best else "#CFC8E6"
             st.markdown(score_bar(r["Model"], r["Macro-F1"], colour), unsafe_allow_html=True)
-
-        st.write("")
-        st.dataframe(comp[["Model", "Accuracy", "Macro-F1", "Weighted-F1",
-                           "Train-Test gap (Macro-F1)"]].round(3),
-                     hide_index=True, use_container_width=True)
-
-        st.markdown(
-            "**How the best model was chosen**\n\n"
-            "1. All models used the same 80:20 stratified train/test split.\n"
-            "2. Each model was tuned on the training data only, with 5-fold cross-validation.\n"
-            "3. Each tuned model was tested once on the 20% test data it had never seen.\n"
-            "4. The highest Macro-F1 wins. It treats Low, Medium and High equally, "
-            "so a model cannot score well by ignoring one tier.\n"
-            "5. A large train-test gap means overfitting: the model memorised the training data.")
     else:
         st.info("Add models/model_comparison.csv to the repo to see this comparison.")
-
-st.write("")
-st.caption("Tiers are approximate because Google Play shows installs as ranges. "
-           "This is a pattern-based estimate, not a guarantee.")
